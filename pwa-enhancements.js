@@ -15,6 +15,7 @@
       .${WARNING_CLASS}{background:#fff4e5!important;border-color:#c77800!important;color:#9a5a00!important}
       .pwa-test-push-btn{margin-left:0}
       .pwa-test-push-btn[disabled]{opacity:.55;cursor:not-allowed}
+      #dayDetail{scroll-margin-top:92px}
     `;
     document.head.appendChild(style);
   }
@@ -40,9 +41,14 @@
   }
 
   function ensureTestButton(){
+    const identity=getIdentity();
+    let btn=document.getElementById('testBackgroundPushBtn');
+    if(identity!=='admin'){
+      if(btn)btn.remove();
+      return null;
+    }
     const {subscribe}=getActionButtons();
     if(!subscribe)return null;
-    let btn=document.getElementById('testBackgroundPushBtn');
     if(btn)return btn;
     btn=document.createElement('button');
     btn.id='testBackgroundPushBtn';
@@ -116,6 +122,10 @@
   }
 
   async function sendTestBackgroundPush(){
+    if(getIdentity()!=='admin'){
+      alert('測試背景通知僅限管理員使用。');
+      return;
+    }
     const api=window.getPushApiBase?.();
     if(!api){alert('尚未設定 Push Server 網址。');return;}
     if(Notification.permission!=='granted'){alert('請先允許通知。');return;}
@@ -158,6 +168,24 @@
     }
   }
 
+  function scrollToItineraryStart(){
+    const target=document.getElementById('dayDetail');
+    if(!target)return;
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  function wrapDaySelection(){
+    const original=window.selectDay;
+    if(typeof original!=='function'||original.__itineraryAnchorEnhanced)return;
+    const wrapped=function(...args){
+      const result=original.apply(this,args);
+      setTimeout(scrollToItineraryStart,80);
+      return result;
+    };
+    wrapped.__itineraryAnchorEnhanced=true;
+    window.selectDay=wrapped;
+  }
+
   function wrapAsync(name){
     const original=window[name];
     if(typeof original!=='function'||original.__pwaEnhanced)return;
@@ -188,6 +216,7 @@
     wrapAsync('unsubscribePush');
     wrapSync('renderPwaPanel');
     wrapSync('refreshAuthenticatedUI');
+    wrapDaySelection();
     refreshPwaActionStates();
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshPwaActionStates()});
   }
