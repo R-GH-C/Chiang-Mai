@@ -1,12 +1,27 @@
-const CACHE_NAME='cm26-pwa-20260914-v9';
+const CACHE_NAME='cm26-pwa-20260914-v10';
 const APP_SHELL=[
   './',
   './index.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './pwa-enhancements.js'
+  './pwa-enhancements.js',
+  './trip-extras.js'
 ];
+
+async function injectTripExtras(response){
+  if(!response)return response;
+  const type=response.headers.get('content-type')||'';
+  if(!type.includes('text/html'))return response;
+  let html=await response.text();
+  if(!html.includes('trip-extras.js')){
+    const tag='<script src="./trip-extras.js"></script>';
+    html=html.includes('</body>')?html.replace('</body>',`${tag}\n</body>`):`${html}\n${tag}`;
+  }
+  const headers=new Headers(response.headers);
+  headers.delete('content-length');
+  return new Response(html,{status:response.status,statusText:response.statusText,headers});
+}
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(APP_SHELL)));
@@ -27,11 +42,11 @@ self.addEventListener('fetch',event=>{
 
   if(event.request.mode==='navigate'){
     event.respondWith(
-      fetch(event.request).then(res=>{
+      fetch(event.request).then(async res=>{
         const copy=res.clone();
         caches.open(CACHE_NAME).then(c=>c.put('./index.html',copy));
-        return res;
-      }).catch(()=>caches.match('./index.html'))
+        return injectTripExtras(res);
+      }).catch(async()=>injectTripExtras(await caches.match('./index.html')))
     );
     return;
   }
