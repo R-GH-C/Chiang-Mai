@@ -3,23 +3,15 @@
 
   const ACTIVE_CLASS='pwa-action-active';
   const WARNING_CLASS='pwa-action-warning';
+  const TEST_TOKEN_KEY='push_test_token';
 
   function addStyles(){
     if(document.getElementById('pwa-enhancement-styles'))return;
     const style=document.createElement('style');
     style.id='pwa-enhancement-styles';
     style.textContent=`
-      .${ACTIVE_CLASS}{
-        background:#e8f7ee!important;
-        border-color:#2f855a!important;
-        color:#17653b!important;
-        box-shadow:0 0 0 2px rgba(47,133,90,.12) inset!important;
-      }
-      .${WARNING_CLASS}{
-        background:#fff4e5!important;
-        border-color:#c77800!important;
-        color:#9a5a00!important;
-      }
+      .${ACTIVE_CLASS}{background:#e8f7ee!important;border-color:#2f855a!important;color:#17653b!important;box-shadow:0 0 0 2px rgba(47,133,90,.12) inset!important}
+      .${WARNING_CLASS}{background:#fff4e5!important;border-color:#c77800!important;color:#9a5a00!important}
       .pwa-test-push-btn{margin-left:0}
       .pwa-test-push-btn[disabled]{opacity:.55;cursor:not-allowed}
     `;
@@ -96,16 +88,26 @@
       const api=window.getPushApiBase?.()||'';
       const ready=active&&Notification.permission==='granted'&&!!api;
       testBtn.disabled=!ready;
-      testBtn.title=ready?'立即由 Railway Push Server 發送一則真正的背景通知':'請先允許通知並啟用目前身份的背景課程提醒';
+      testBtn.title=ready?'立即由 Railway Push Server 發送真正的背景通知':'請先允許通知並啟用目前身份的背景課程提醒';
     }
+  }
+
+  function getTestToken(){
+    let token='';
+    try{token=String(window.stateGet?.(TEST_TOKEN_KEY,'')||'')}catch(e){}
+    if(token)return token;
+    token=prompt('第一次測試請輸入「背景通知測試金鑰」。輸入後會只儲存在此裝置。')||'';
+    token=token.trim();
+    if(token){try{window.stateSet?.(TEST_TOKEN_KEY,token)}catch(e){}}
+    return token;
   }
 
   async function sendTestBackgroundPush(){
     const api=window.getPushApiBase?.();
     if(!api){alert('尚未設定 Push Server 網址。');return;}
-    if(Notification.permission!=='granted'){
-      alert('請先允許通知。');return;
-    }
+    if(Notification.permission!=='granted'){alert('請先允許通知。');return;}
+    const token=getTestToken();
+    if(!token)return;
     try{
       const reg=window.pwaRegistration||await navigator.serviceWorker.ready;
       const sub=await reg.pushManager.getSubscription();
@@ -118,10 +120,14 @@
       if(btn){btn.disabled=true;btn.textContent='正在發送…'}
       const res=await fetch(`${api}/api/test-push`,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','X-Test-Token':token},
         body:JSON.stringify({endpoint:sub.endpoint})
       });
       const data=await res.json().catch(()=>({}));
+      if(res.status===401){
+        try{window.stateSet?.(TEST_TOKEN_KEY,'')}catch(e){}
+        throw new Error('測試金鑰錯誤，已清除，請重新輸入');
+      }
       if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
       window.toast?.('測試背景通知已送出，請查看鎖定畫面');
     }catch(e){
@@ -165,9 +171,7 @@
     wrapSync('renderPwaPanel');
     wrapSync('refreshAuthenticatedUI');
     refreshPwaActionStates();
-    document.addEventListener('visibilitychange',()=>{
-      if(!document.hidden)refreshPwaActionStates();
-    });
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshPwaActionStates()});
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
