@@ -79,9 +79,10 @@
       const identity=String(req.body?.identity||'');
       if(!['richard','angel','admin'].includes(identity))return res.status(400).json({error:'invalid identity'});
       const ip=req.ip||req.socket?.remoteAddress||'unknown';
-      const now=Date.now(),last=rate.get(ip)||0;
+      const rateKey=`${ip}|${identity}`;
+      const now=Date.now(),last=rate.get(rateKey)||0;
       if(now-last<700){res.set('Retry-After','1');return res.status(429).json({error:'please wait before retrying'});}
-      rate.set(ip,now);
+      rate.set(rateKey,now);
       const incomingRaw=Array.isArray(req.body?.notes)?req.body.notes:[];
       if(incomingRaw.length>MAX_NOTES)return res.status(413).json({error:'too many notes'});
       const incoming=incomingRaw.map(normalizeNote).filter(Boolean);
