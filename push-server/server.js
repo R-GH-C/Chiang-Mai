@@ -12,6 +12,7 @@ const VAPID_PRIVATE_KEY=process.env.VAPID_PRIVATE_KEY||'';
 const VAPID_SUBJECT=process.env.VAPID_SUBJECT||'mailto:example@example.com';
 const CRON_SECRET=process.env.CRON_SECRET||'';
 const STORE_FILE=process.env.STORE_FILE||path.join(__dirname,'data','store.json');
+const ACTIVATION_CONFIRM_DELAY_MS=10000;
 
 if(!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY){
   console.warn('WARNING: VAPID keys are not configured. Run: npm run generate-vapid');
@@ -41,6 +42,27 @@ function normalizeIdentity(x){
   return ['richard','angel','admin'].includes(x)?x:null;
 }
 
+async function sendActivationConfirmation(subscription,identity){
+  if(identity==='admin'||!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY)return;
+  const label=identity==='angel'?'🐵 Angel':'🎓 Richard';
+  const payload=JSON.stringify({
+    title:'清邁 2026｜背景提醒已啟用',
+    body:`${label} 的背景課程提醒已可正常接收。`,
+    tag:`cm26-activation-${identity}`,
+    url:'./'
+  });
+  try{
+    await webpush.sendNotification(subscription,payload);
+  }catch(err){
+    if(err.statusCode===404||err.statusCode===410){
+      const store=loadStore();
+      store.subscriptions=store.subscriptions.filter(x=>x.subscription?.endpoint!==subscription.endpoint);
+      saveStore(store);
+    }
+    console.error('Activation confirmation Push failed',err.statusCode||err.message);
+  }
+}
+
 app.get('/health',(req,res)=>res.json({ok:true,time:new Date().toISOString()}));
 
 app.get('/api/vapid-public-key',(req,res)=>{
@@ -60,10 +82,21 @@ app.post('/api/subscribe',(req,res)=>{
   }else{
     row.subscription=subscription;
   }
-  if(!row.identities.includes(identity))row.identities.push(identity);
+  const newIdentity=!row.identities.includes(identity);
+  if(newIdentity)row.identities.push(identity);
   row.updatedAt=new Date().toISOString();
   saveStore(store);
-  res.json({ok:true,identities:row.identities});
+
+  const confirmationScheduled=newIdentity&&identity!=='admin'&&!!VAPID_PUBLIC_KEY&&!!VAPID_PRIVATE_KEY;
+  if(confirmationScheduled){
+    setTimeout(()=>sendActivationConfirmation(subscription,identity).catch(console.error),ACTIVATION_CONFIRM_DELAY_MS);
+  }
+  res.json({
+    ok:true,
+    identities:row.identities,
+    confirmationScheduled,
+    confirmationDelaySeconds:confirmationScheduled?ACTIVATION_CONFIRM_DELAY_MS/1000:0
+  });
 });
 
 app.post('/api/unsubscribe',(req,res)=>{
