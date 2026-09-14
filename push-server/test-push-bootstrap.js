@@ -6,7 +6,8 @@
   const originalExpress=require('express');
   const expressModule=require.cache[require.resolve('express')];
   const STORE_FILE=process.env.STORE_FILE||path.join(__dirname,'data','store.json');
-  const TEST_PUSH_TOKEN=process.env.TEST_PUSH_TOKEN||'';
+  const TEST_PUSH_TOKEN=process.env.TEST_PUSH_TOKEN||process.env.CRON_SECRET||'';
+  const FRONTEND_ORIGIN=process.env.FRONTEND_ORIGIN||'*';
   const lastSent=new Map();
 
   if(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY){
@@ -29,6 +30,14 @@
   function wrappedExpress(...args){
     const app=originalExpress(...args);
     app.post('/api/test-push',originalExpress.json({limit:'16kb'}),async(req,res)=>{
+      const origin=req.get('origin')||'';
+      if(FRONTEND_ORIGIN!=='*'&&origin!==FRONTEND_ORIGIN){
+        return res.status(403).json({error:'origin not allowed'});
+      }
+      if(origin){
+        res.set('Access-Control-Allow-Origin',origin);
+        res.set('Vary','Origin');
+      }
       if(!TEST_PUSH_TOKEN||req.get('x-test-token')!==TEST_PUSH_TOKEN){
         return res.status(401).json({error:'unauthorized'});
       }
