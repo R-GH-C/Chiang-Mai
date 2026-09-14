@@ -82,12 +82,11 @@ app.post('/api/subscribe',(req,res)=>{
   }else{
     row.subscription=subscription;
   }
-  const newIdentity=!row.identities.includes(identity);
-  if(newIdentity)row.identities.push(identity);
+  if(!row.identities.includes(identity))row.identities.push(identity);
   row.updatedAt=new Date().toISOString();
   saveStore(store);
 
-  const confirmationScheduled=newIdentity&&identity!=='admin'&&!!VAPID_PUBLIC_KEY&&!!VAPID_PRIVATE_KEY;
+  const confirmationScheduled=identity!=='admin'&&!!VAPID_PUBLIC_KEY&&!!VAPID_PRIVATE_KEY;
   if(confirmationScheduled){
     setTimeout(()=>sendActivationConfirmation(subscription,identity).catch(console.error),ACTIVATION_CONFIRM_DELAY_MS);
   }
