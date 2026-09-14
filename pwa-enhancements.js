@@ -5,6 +5,7 @@
   const WARNING_CLASS='pwa-action-warning';
   const TEST_TOKEN_KEY='push_test_token';
   let testReadyAt=0;
+  let adminScrollFrame=0;
 
   function addStyles(){
     if(document.getElementById('pwa-enhancement-styles'))return;
@@ -18,12 +19,36 @@
       #dayDetail{scroll-margin-top:92px}
       .admin-user-preview .personal-card{
         max-height:min(52vh,430px);overflow-y:scroll;overscroll-behavior:contain;
-        scrollbar-gutter:stable;padding-right:12px;-webkit-overflow-scrolling:touch
+        scrollbar-gutter:stable;padding-right:18px;-webkit-overflow-scrolling:touch;
+        --admin-scroll-thumb-top:18px;--admin-scroll-thumb-h:64px
+      }
+      .admin-user-preview .personal-card.has-admin-scroll{
+        background-image:
+          linear-gradient(#475467,#475467),
+          linear-gradient(#e4e7ec,#e4e7ec);
+        background-position:
+          calc(100% - 6px) var(--admin-scroll-thumb-top),
+          calc(100% - 6px) 18px;
+        background-size:
+          5px var(--admin-scroll-thumb-h),
+          5px calc(100% - 36px);
+        background-repeat:no-repeat;
+        box-shadow:var(--shadow),inset -13px 0 0 rgba(242,244,247,.72)
       }
       .admin-user-preview .personal-card::-webkit-scrollbar{width:8px}
       .admin-user-preview .personal-card::-webkit-scrollbar-track{background:#eef2f6;border-radius:999px}
-      .admin-user-preview .personal-card::-webkit-scrollbar-thumb{background:#98a2b3;border-radius:999px;border:2px solid #eef2f6}
-      @media(max-width:720px){.admin-user-preview .personal-card{max-height:min(48vh,380px)}}
+      .admin-user-preview .personal-card::-webkit-scrollbar-thumb{background:#667085;border-radius:999px;border:2px solid #eef2f6}
+      @media(max-width:720px){
+        .admin-user-preview .personal-card{max-height:min(48vh,380px);padding-right:20px}
+        .admin-user-preview .personal-card.has-admin-scroll{
+          background-position:
+            calc(100% - 7px) var(--admin-scroll-thumb-top),
+            calc(100% - 7px) 18px;
+          background-size:
+            6px var(--admin-scroll-thumb-h),
+            6px calc(100% - 36px)
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -194,6 +219,39 @@
     window.selectDay=wrapped;
   }
 
+  function updateAdminScrollVisual(card){
+    if(!card)return;
+    const overflow=Math.max(0,card.scrollHeight-card.clientHeight);
+    const hasOverflow=overflow>2;
+    card.classList.toggle('has-admin-scroll',hasOverflow);
+    if(!hasOverflow)return;
+
+    const trackHeight=Math.max(1,card.clientHeight-36);
+    const thumbHeight=Math.max(48,Math.min(trackHeight,Math.round(trackHeight*(card.clientHeight/card.scrollHeight))));
+    const maxThumbTop=Math.max(0,trackHeight-thumbHeight);
+    const thumbTop=18+(overflow?Math.round((card.scrollTop/overflow)*maxThumbTop):0);
+    card.style.setProperty('--admin-scroll-thumb-top',`${thumbTop}px`);
+    card.style.setProperty('--admin-scroll-thumb-h',`${thumbHeight}px`);
+  }
+
+  function syncAdminScrollVisuals(){
+    document.querySelectorAll('.admin-user-preview .personal-card').forEach(card=>{
+      if(!card.__adminScrollVisualBound){
+        card.addEventListener('scroll',()=>updateAdminScrollVisual(card),{passive:true});
+        card.__adminScrollVisualBound=true;
+      }
+      updateAdminScrollVisual(card);
+    });
+  }
+
+  function queueAdminScrollVisuals(){
+    if(adminScrollFrame)return;
+    adminScrollFrame=requestAnimationFrame(()=>{
+      adminScrollFrame=0;
+      syncAdminScrollVisuals();
+    });
+  }
+
   function wrapAsync(name){
     const original=window[name];
     if(typeof original!=='function'||original.__pwaEnhanced)return;
@@ -207,7 +265,7 @@
         }
         return result;
       }finally{
-        setTimeout(refreshPwaActionStates,0);
+        setTimeout(()=>{refreshPwaActionStates();queueAdminScrollVisuals();},0);
       }
     };
     wrapped.__pwaEnhanced=true;
@@ -219,7 +277,7 @@
     if(typeof original!=='function'||original.__pwaEnhanced)return;
     const wrapped=function(...args){
       const result=original.apply(this,args);
-      setTimeout(refreshPwaActionStates,0);
+      setTimeout(()=>{refreshPwaActionStates();queueAdminScrollVisuals();},0);
       return result;
     };
     wrapped.__pwaEnhanced=true;
@@ -235,7 +293,14 @@
     wrapSync('refreshAuthenticatedUI');
     wrapDaySelection();
     refreshPwaActionStates();
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshPwaActionStates()});
+    queueAdminScrollVisuals();
+
+    const observer=new MutationObserver(()=>queueAdminScrollVisuals());
+    observer.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener('resize',queueAdminScrollVisuals,{passive:true});
+    document.addEventListener('visibilitychange',()=>{
+      if(!document.hidden){refreshPwaActionStates();queueAdminScrollVisuals();}
+    });
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
