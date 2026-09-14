@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-v1';
+const CACHE_NAME='cm26-pwa-20260914-v2';
 const APP_SHELL=[
   './',
   './index.html',
