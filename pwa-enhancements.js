@@ -16,6 +16,14 @@
       .pwa-test-push-btn{margin-left:0}
       .pwa-test-push-btn[disabled]{opacity:.55;cursor:not-allowed}
       #dayDetail{scroll-margin-top:92px}
+      .admin-user-preview .personal-card{
+        max-height:min(52vh,430px);overflow-y:scroll;overscroll-behavior:contain;
+        scrollbar-gutter:stable;padding-right:12px;-webkit-overflow-scrolling:touch
+      }
+      .admin-user-preview .personal-card::-webkit-scrollbar{width:8px}
+      .admin-user-preview .personal-card::-webkit-scrollbar-track{background:#eef2f6;border-radius:999px}
+      .admin-user-preview .personal-card::-webkit-scrollbar-thumb{background:#98a2b3;border-radius:999px;border:2px solid #eef2f6}
+      @media(max-width:720px){.admin-user-preview .personal-card{max-height:min(48vh,380px)}}
     `;
     document.head.appendChild(style);
   }
@@ -190,8 +198,17 @@
     const original=window[name];
     if(typeof original!=='function'||original.__pwaEnhanced)return;
     const wrapped=async function(...args){
-      try{return await original.apply(this,args)}
-      finally{setTimeout(refreshPwaActionStates,0)}
+      const identityBefore=getIdentity();
+      const activeBefore=name==='subscribePush'?pushIsActive():false;
+      try{
+        const result=await original.apply(this,args);
+        if(name==='subscribePush'&&!activeBefore&&pushIsActive()&&(identityBefore==='richard'||identityBefore==='angel')){
+          alert('背景課程提醒已啟用。\n\n系統會在約 10 秒後自動發送一則確認通知，請現在鎖定手機螢幕確認是否收到。');
+        }
+        return result;
+      }finally{
+        setTimeout(refreshPwaActionStates,0);
+      }
     };
     wrapped.__pwaEnhanced=true;
     window[name]=wrapped;
