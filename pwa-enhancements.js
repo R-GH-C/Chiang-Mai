@@ -4,8 +4,20 @@
   const ACTIVE_CLASS='pwa-action-active';
   const WARNING_CLASS='pwa-action-warning';
   const TEST_TOKEN_KEY='push_test_token';
+  const DEFAULT_PUSH_API='https://striking-determination-production-6964.up.railway.app';
   let testReadyAt=0;
   let adminScrollFrame=0;
+
+  function ensureDefaultPushApi(){
+    try{
+      const current=String(window.stateGet?.('push_api_base','')||'').trim().replace(/\/$/,'');
+      if(current)return current;
+      window.stateSet?.('push_api_base',DEFAULT_PUSH_API);
+    }catch(e){
+      console.warn('Unable to persist default Push server URL',e);
+    }
+    return DEFAULT_PUSH_API;
+  }
 
   function addStyles(){
     if(document.getElementById('pwa-enhancement-styles'))return;
@@ -95,6 +107,7 @@
 
   function refreshPwaActionStates(){
     addStyles();
+    ensureDefaultPushApi();
     const {notify,subscribe}=getActionButtons();
     const testBtn=ensureTestButton();
 
@@ -124,8 +137,13 @@
       subscribe.disabled=active;
     }
 
+    const hint=document.getElementById('pwaHint');
+    if(hint&&(location.protocol==='https:'||location.hostname==='localhost')){
+      hint.textContent='背景通知伺服器已預先設定；Richard / Angel 可直接允許通知並啟用背景課程提醒。';
+    }
+
     if(testBtn){
-      const api=window.getPushApiBase?.()||'';
+      const api=window.getPushApiBase?.()||DEFAULT_PUSH_API;
       const remaining=Math.max(0,Math.ceil((testReadyAt-Date.now())/1000));
       const ready=active&&Notification.permission==='granted'&&!!api&&remaining===0;
       testBtn.disabled=!ready;
@@ -159,7 +177,7 @@
       alert('測試背景通知僅限管理員使用。');
       return;
     }
-    const api=window.getPushApiBase?.();
+    const api=window.getPushApiBase?.()||DEFAULT_PUSH_API;
     if(!api){alert('尚未設定 Push Server 網址。');return;}
     if(Notification.permission!=='granted'){alert('請先允許通知。');return;}
     const token=getTestToken();
@@ -285,6 +303,7 @@
   }
 
   function init(){
+    ensureDefaultPushApi();
     addStyles();
     wrapAsync('requestNotifyPermission');
     wrapAsync('subscribePush');
@@ -292,6 +311,7 @@
     wrapSync('renderPwaPanel');
     wrapSync('refreshAuthenticatedUI');
     wrapDaySelection();
+    try{window.renderPwaPanel?.()}catch(e){console.warn(e)}
     refreshPwaActionStates();
     queueAdminScrollVisuals();
 
