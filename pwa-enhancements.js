@@ -4,6 +4,7 @@
   const ACTIVE_CLASS='pwa-action-active';
   const WARNING_CLASS='pwa-action-warning';
   const TEST_TOKEN_KEY='push_test_token';
+  let testReadyAt=0;
 
   function addStyles(){
     if(document.getElementById('pwa-enhancement-styles'))return;
@@ -47,7 +48,7 @@
     btn.id='testBackgroundPushBtn';
     btn.type='button';
     btn.className='btn soft pwa-test-push-btn';
-    btn.textContent='🔔 發送測試背景通知';
+    btn.textContent='🔔 10 秒後測試背景通知';
     btn.addEventListener('click',sendTestBackgroundPush);
     subscribe.insertAdjacentElement('afterend',btn);
     return btn;
@@ -86,9 +87,11 @@
 
     if(testBtn){
       const api=window.getPushApiBase?.()||'';
-      const ready=active&&Notification.permission==='granted'&&!!api;
+      const remaining=Math.max(0,Math.ceil((testReadyAt-Date.now())/1000));
+      const ready=active&&Notification.permission==='granted'&&!!api&&remaining===0;
       testBtn.disabled=!ready;
-      testBtn.title=ready?'立即由 Railway Push Server 發送真正的背景通知':'請先允許通知並啟用目前身份的背景課程提醒';
+      testBtn.textContent=remaining>0?`請稍候 ${remaining} 秒`:'🔔 10 秒後測試背景通知';
+      testBtn.title=ready?'按下後 10 秒才發送，請立即鎖定螢幕':'請先允許通知並啟用目前身份的背景課程提醒';
     }
   }
 
@@ -100,6 +103,16 @@
     token=token.trim();
     if(token){try{window.stateSet?.(TEST_TOKEN_KEY,token)}catch(e){}}
     return token;
+  }
+
+  function startTestCooldown(seconds){
+    const s=Math.max(1,Number(seconds)||15);
+    testReadyAt=Date.now()+s*1000;
+    refreshPwaActionStates();
+    const timer=setInterval(()=>{
+      refreshPwaActionStates();
+      if(Date.now()>=testReadyAt)clearInterval(timer);
+    },1000);
   }
 
   async function sendTestBackgroundPush(){
@@ -117,7 +130,7 @@
         return;
       }
       const btn=document.getElementById('testBackgroundPushBtn');
-      if(btn){btn.disabled=true;btn.textContent='正在發送…'}
+      if(btn){btn.disabled=true;btn.textContent='正在排程…'}
       const res=await fetch(`${api}/api/test-push`,{
         method:'POST',
         headers:{'Content-Type':'application/json','X-Test-Token':token},
@@ -128,14 +141,19 @@
         try{window.stateSet?.(TEST_TOKEN_KEY,'')}catch(e){}
         throw new Error('測試金鑰錯誤，已清除，請重新輸入');
       }
+      if(res.status===429){
+        const seconds=Number(data.retryAfterSeconds||res.headers.get('Retry-After')||15);
+        startTestCooldown(seconds);
+        throw new Error(`請等待 ${seconds} 秒後再試`);
+      }
       if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
-      window.toast?.('測試背景通知已送出，請查看鎖定畫面');
+      startTestCooldown(data.cooldownSeconds||15);
+      const delay=Number(data.delaySeconds||10);
+      alert(`測試通知已排程，將在 ${delay} 秒後發送。\n\n請現在立刻鎖定 iPhone 螢幕，等待通知出現。`);
     }catch(e){
       console.error(e);
       alert(`測試背景通知發送失敗：${e.message||e}`);
     }finally{
-      const btn=document.getElementById('testBackgroundPushBtn');
-      if(btn)btn.textContent='🔔 發送測試背景通知';
       refreshPwaActionStates();
     }
   }
