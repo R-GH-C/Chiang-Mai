@@ -312,6 +312,13 @@ body.angel-mode .user-chip:not(.logout-btn){
 .pwa-api-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
 .pwa-api-row input{border:1px solid var(--border);border-radius:11px;padding:10px;min-width:0}
 .install-hint{font-size:11px;color:var(--muted);line-height:1.55;margin-top:8px}
+.install-guide-card{
+  width:min(500px,100%);background:#fff;border-radius:25px;padding:22px;
+  box-shadow:0 28px 90px rgba(16,24,40,.34)
+}
+.install-guide-icon{font-size:42px;line-height:1;margin-bottom:10px}
+.install-steps{margin:14px 0;padding:13px 14px;border-radius:14px;background:var(--blue-soft);font-weight:850;color:var(--navy)}
+.install-line-note{margin-top:12px;padding:12px;border-radius:13px;background:var(--orange-soft);color:var(--orange);font-weight:750}
 @media(max-width:720px){
   .course-grid{grid-template-columns:1fr}
   .pwa-status{grid-template-columns:1fr}
@@ -340,8 +347,8 @@ body.angel-mode .user-chip:not(.logout-btn){
 .logout-btn{color:#b42318;border-color:#f5c2bd;background:#fff}
 .logout-btn:hover{background:#fff1f0}
 @media(max-width:620px){
-  .logout-btn{font-size:0;width:40px;height:40px;padding:0}
-  .logout-btn::before{content:'🚪';font-size:16px}
+  .logout-btn{width:40px;height:40px;padding:0}
+  .logout-btn .logout-label{display:none}
 }
 .personal-home{margin:16px 0}
 .personal-card{
@@ -495,6 +502,17 @@ body.site-locked{overflow:hidden}
   </div>
 </div>
 
+<div id="installGuideOverlay" class="course-reminder-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="加入手機桌面說明">
+  <div class="install-guide-card">
+    <div class="install-guide-icon">📲</div>
+    <div class="briefing-title">是否加入手機桌面？</div>
+    <div class="briefing-sub">加入主畫面後，可用接近 App 的方式快速開啟旅行控制台；此步驟仍需由你在瀏覽器中操作。</div>
+    <div class="install-steps">分享 → 加入主畫面 → 加入</div>
+    <div id="installLineNote" class="install-line-note hidden">目前是 LINE 內建瀏覽器。請先以 Safari 或 Chrome 開啟本頁，再依上方步驟加入主畫面。</div>
+    <div class="briefing-actions"><button class="btn" type="button" onclick="closeInstallGuide()">知道了</button></div>
+  </div>
+</div>
+
 <div id="courseReminderOverlay" class="course-reminder-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="課程提醒">
   <div class="course-reminder-card">
     <div style="display:flex;justify-content:flex-end"><button class="icon-btn" onclick="closeCourseReminder()">✕</button></div>
@@ -506,7 +524,7 @@ body.site-locked{overflow:hidden}
   <div class="brand">清邁 2026</div>
   <div class="search"><input id="searchInput" placeholder="搜尋：按摩、Warorot、TDAC、保險…"><span class="icon">⌕</span></div>
   <button id="authUserChip" class="user-chip" onclick="goAccountSettings()" title="目前登入身份">未登入</button>
-  <button class="user-chip logout-btn" onclick="logoutUser()" title="登出目前使用者">🚪 登出</button>
+  <button class="user-chip logout-btn" onclick="logoutUser()" title="登出目前使用者" aria-label="登出目前使用者"><span aria-hidden="true">🚪</span><span class="logout-label"> 登出</span></button>
   <button class="icon-btn" onclick="window.print()" title="列印/存PDF">🖨️</button>
   <button class="icon-btn lock-now" onclick="lockSite()" title="立即鎖定">🔒</button>
 </div></div>
@@ -870,6 +888,7 @@ async function attemptUnlock(){
       if(error)error.textContent='';
       setLockedUI(false);
       refreshAuthenticatedUI();
+      showInstallGuideAfterBriefing=true;
       setTimeout(()=>showDailyBriefing(true),120);
       return;
     }
@@ -913,6 +932,7 @@ function completeUserLogin(identity){
   if(identityError)identityError.textContent='';
   setLockedUI(false);
   refreshAuthenticatedUI();
+  showInstallGuideAfterBriefing=true;
   setTimeout(()=>showDailyBriefing(true),120);
 }
 function cancelIdentitySelection(){
@@ -922,6 +942,7 @@ function cancelIdentitySelection(){
 }
 function lockSite(){
   sessionStorage.removeItem(AUTH_SESSION_KEY);
+  showInstallGuideAfterBriefing=false;
   closeBriefing();
   setLockedUI(true);
   updateAuthChip();
@@ -935,6 +956,7 @@ function logoutUser(){
   const label=a.identity==='admin'?'管理者':USER_LABELS[a.identity];
   if(!confirm(`確定要登出 ${label}？`))return;
   sessionStorage.removeItem(AUTH_SESSION_KEY);
+  showInstallGuideAfterBriefing=false;
   closeBriefing();
   pendingPinDigest=null;
   loginIdentity=null;
@@ -944,6 +966,7 @@ function logoutUser(){
 
 function switchUser(){
   sessionStorage.removeItem(AUTH_SESSION_KEY);
+  showInstallGuideAfterBriefing=false;
   closeBriefing();
   setLockedUI(true);
   updateAuthChip();
@@ -1116,6 +1139,10 @@ function showDailyBriefing(force=false){
 }
 function closeBriefing(){
   const o=$('#briefingOverlay');if(o){o.classList.remove('show');o.setAttribute('aria-hidden','true')}
+  if(showInstallGuideAfterBriefing){
+    showInstallGuideAfterBriefing=false;
+    setTimeout(showInstallGuideIfNeeded,180);
+  }
 }
 function updateAuthChip(){
   const chip=$('#authUserChip'),a=currentAuth();if(!chip)return;
@@ -1208,6 +1235,7 @@ const COURSE_REMINDER_OFFSETS=[30,15,5];
 const PUSH_API_KEY='push_api_base';
 let deferredInstallPrompt=null;
 let pwaRegistration=null;
+let showInstallGuideAfterBriefing=false;
 
 function visibleCourses(){
   const a=currentAuth(); if(!a)return [];
@@ -1384,6 +1412,22 @@ function goCourseSettings(){
 function isStandalonePWA(){
   return window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone===true;
 }
+function isIOSDevice(){
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+}
+function isLineBrowser(){return /Line\//i.test(navigator.userAgent)}
+function showInstallGuideIfNeeded(){
+  if(!isIOSDevice()||isStandalonePWA())return;
+  const overlay=$('#installGuideOverlay'),lineNote=$('#installLineNote');
+  if(!overlay)return;
+  lineNote?.classList.toggle('hidden',!isLineBrowser());
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+}
+function closeInstallGuide(){
+  const overlay=$('#installGuideOverlay');
+  if(overlay){overlay.classList.remove('show');overlay.setAttribute('aria-hidden','true')}
+}
 async function initPWA(){
   window.addEventListener('beforeinstallprompt',e=>{
     e.preventDefault();deferredInstallPrompt=e;renderPwaPanel();
@@ -1404,8 +1448,8 @@ async function installPWA(){
     await deferredInstallPrompt.userChoice;
     deferredInstallPrompt=null;renderPwaPanel();return;
   }
-  if(/iPhone|iPad|iPod/i.test(navigator.userAgent)){
-    alert('iPhone / iPad：請用 Safari 的「分享」→「加入主畫面」。');
+  if(isIOSDevice()){
+    showInstallGuideIfNeeded();
   }else{
     alert('若瀏覽器沒有跳出安裝提示，請從瀏覽器選單選擇「安裝 App」或「加入主畫面」。');
   }
@@ -2179,6 +2223,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  briefingOverlay?.addEventListener('click',e=>{if(e.target===briefingOverlay)closeBriefing();});
  const courseOverlay=$('#courseReminderOverlay');
  courseOverlay?.addEventListener('click',e=>{if(e.target===courseOverlay)closeCourseReminder();});
+ const installGuideOverlay=$('#installGuideOverlay');
+ installGuideOverlay?.addEventListener('click',e=>{if(e.target===installGuideOverlay)closeInstallGuide();});
  initPWA();
  checkCourseReminders();
  setInterval(checkCourseReminders,15000);
