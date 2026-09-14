@@ -1,10 +1,11 @@
-const CACHE_NAME='cm26-pwa-20260914-v2';
+const CACHE_NAME='cm26-pwa-20260914-v3';
 const APP_SHELL=[
   './',
   './index.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './pwa-enhancements.js'
 ];
 
 self.addEventListener('install',event=>{
