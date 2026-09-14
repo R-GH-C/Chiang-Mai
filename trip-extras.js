@@ -112,6 +112,7 @@
       body.removeAttribute('data-cm-theme');body.removeAttribute('data-cm-decor');
       ['--bg','--surface','--navy','--blue','--blue-soft','--border','--cm-hero-a','--cm-hero-b','--cm-topbar'].forEach(v=>root.style.removeProperty(v));
       document.getElementById('cmThemeChip')?.remove();
+      if(meta)meta.setAttribute('content','#17365D');
       return;
     }
     body.classList.add('cm-trip-theme');
@@ -159,7 +160,7 @@
   function ensureMoreNotesButton(){
     const grid=document.getElementById('moreGrid');
     if(!grid||document.getElementById('cmNotesMoreBtn'))return;
-    const b=document.createElement('button');b.id='cmNotesMoreBtn';b.className='more-btn';b.type='button';b.innerHTML='<span style="font-size:28px">📝</span><b>旅行筆記</b><small>私人筆記＋手動同步共同筆記</small>';b.addEventListener('click',openManager);grid.appendChild(b);
+    const b=document.createElement('button');b.id='cmNotesMoreBtn';b.className='more-btn';b.type='button';b.innerHTML='<span style="font-size:28px">📝</span><b>旅行筆記</b><small>私人筆記＋手動同步共同筆記</small>';b.addEventListener('click',()=>openManager());grid.appendChild(b);
   }
 
   function refreshAuthNotesVisibility(){
@@ -181,6 +182,7 @@
     const scope=document.getElementById('cmNoteScope');scope.innerHTML=scopeOptions(identity);
     noteDraftId=id;
     const note=id?noteById(id):null;
+    scope.disabled=!!note;
     const d=date||note?.date||selectedItineraryDate()||bangkokDate();
     document.getElementById('cmNoteDate').value=d;
     document.getElementById('cmNoteType').value=note?.type||(d==='2026-09-29'?'回憶':'一般');
@@ -202,7 +204,7 @@
     const now=new Date().toISOString();
     const old=noteDraftId?noteById(noteDraftId):null;
     const scope=document.getElementById('cmNoteScope').value;
-    const note={id:old?.id||uid(),scope,owner:old?.owner||identity,author:old?.author||identity,date:document.getElementById('cmNoteDate').value||bangkokDate(),type:document.getElementById('cmNoteType').value||'一般',text,createdAt:old?.createdAt||now,updatedAt:now,deleted:false,syncState:scope==='shared'?'pending':'local',__draft:false};
+    const note={id:old?.id||uid(),scope,owner:old?.owner||identity,author:identity,date:document.getElementById('cmNoteDate').value||bangkokDate(),type:document.getElementById('cmNoteType').value||'一般',text,createdAt:old?.createdAt||now,updatedAt:now,deleted:false,syncState:scope==='shared'?'pending':'local',__draft:false};
     if(!old)noteDraftId=note.id;
     upsertNote(note);
     const status=document.getElementById('cmNoteSaveStatus');if(status)status.textContent=scope==='shared'?'✓ 已儲存在本機・共同筆記待同步':'✓ 已自動儲存在本機';
@@ -213,7 +215,7 @@
     const n=noteById(noteDraftId);if(!n)return closeEditor();
     if(!confirm('刪除這則筆記？'))return;
     if(n.scope==='shared'){n.deleted=true;n.updatedAt=new Date().toISOString();n.syncState='pending';upsertNote(n);}else{saveNotes(loadNotes().filter(x=>x.id!==n.id));refreshNotesUI();}
-    closeEditor();showToast(n.scope==='shared'?'已刪除，下一次同步會更新共同筆記':'已刪除');
+    clearTimeout(saveTimer);document.getElementById('cmNoteLayer')?.classList.remove('show');noteDraftId=null;showToast(n.scope==='shared'?'已刪除，下一次同步會更新共同筆記':'已刪除');
   }
 
   function openManager(tab=null,date=''){
