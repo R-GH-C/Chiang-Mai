@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-20260914-v10';
+const CACHE_NAME='cm26-pwa-20260915-v11';
 const APP_SHELL=[
   './',
   './index.html',
@@ -6,18 +6,24 @@ const APP_SHELL=[
   './icons/icon-192.png',
   './icons/icon-512.png',
   './pwa-enhancements.js',
-  './trip-extras.js'
+  './trip-extras.js',
+  './sheet-sync-20260915.js'
 ];
 
-async function injectTripExtras(response){
+async function injectRuntimeEnhancements(response){
   if(!response)return response;
   const type=response.headers.get('content-type')||'';
   if(!type.includes('text/html'))return response;
+
   let html=await response.text();
-  if(!html.includes('trip-extras.js')){
-    const tag='<script src="./trip-extras.js"></script>';
-    html=html.includes('</body>')?html.replace('</body>',`${tag}\n</body>`):`${html}\n${tag}`;
+  const tags=[];
+  if(!html.includes('trip-extras.js'))tags.push('<script src="./trip-extras.js"></script>');
+  if(!html.includes('sheet-sync-20260915.js'))tags.push('<script src="./sheet-sync-20260915.js"></script>');
+  if(tags.length){
+    const block=tags.join('\n');
+    html=html.includes('</body>')?html.replace('</body>',`${block}\n</body>`):`${html}\n${block}`;
   }
+
   const headers=new Headers(response.headers);
   headers.delete('content-length');
   return new Response(html,{status:response.status,statusText:response.statusText,headers});
@@ -45,8 +51,8 @@ self.addEventListener('fetch',event=>{
       fetch(event.request).then(async res=>{
         const copy=res.clone();
         caches.open(CACHE_NAME).then(c=>c.put('./index.html',copy));
-        return injectTripExtras(res);
-      }).catch(async()=>injectTripExtras(await caches.match('./index.html')))
+        return injectRuntimeEnhancements(res);
+      }).catch(async()=>injectRuntimeEnhancements(await caches.match('./index.html')))
     );
     return;
   }
