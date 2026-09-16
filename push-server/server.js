@@ -117,8 +117,8 @@ async function sendReleaseNotification(info){
   const store=ensureStoreShape(loadStore());const key=`release_${info.version}`;if(store.sent[key])return {sent:0,skipped:'already sent'};
   const summary=String(info.publicSummary||'已完成最新版本更新。').slice(0,160);let sent=0;
   for(const row of [...store.subscriptions]){
-    const ids=Array.isArray(row.identities)?row.identities:[];const angelOnly=ids.includes('angel')&&!ids.includes('richard')&&!ids.includes('admin');
-    const payload=JSON.stringify({title:angelOnly?'🐒 清邁 2026 已更新完成 ✅':'清邁 2026 已更新完成 ✅',body:angelOnly?`🐵 ${summary}`:summary,tag:`cm26-release-${info.version}`,url:'./'});
+    const ids=Array.isArray(row.identities)?row.identities:[];const angelTarget=ids.includes('angel');
+    const payload=JSON.stringify({title:angelTarget?'🐒 清邁 2026 已更新完成 ✅':'清邁 2026 已更新完成 ✅',body:angelTarget?`🐵 ${summary}`:summary,tag:`cm26-release-${info.version}`,url:'./'});
     try{await webpush.sendNotification(row.subscription,payload);sent++;}
     catch(err){if(err.statusCode===404||err.statusCode===410)store.subscriptions=store.subscriptions.filter(x=>x!==row);else console.error('Release Push failed',err.statusCode||err.message);}
   }
