@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-20260915-v11';
+const CACHE_NAME='cm26-pwa-20260916-v12';
 const APP_SHELL=[
   './',
   './index.html',
@@ -7,7 +7,11 @@ const APP_SHELL=[
   './icons/icon-512.png',
   './pwa-enhancements.js',
   './trip-extras.js',
-  './sheet-sync-20260915.js'
+  './sheet-sync-20260915.js',
+  './travel-ledger.js',
+  './hero-surprise.js',
+  './runtime-fixes.js',
+  './release.json'
 ];
 
 async function injectRuntimeEnhancements(response){
@@ -19,6 +23,9 @@ async function injectRuntimeEnhancements(response){
   const tags=[];
   if(!html.includes('trip-extras.js'))tags.push('<script src="./trip-extras.js"></script>');
   if(!html.includes('sheet-sync-20260915.js'))tags.push('<script src="./sheet-sync-20260915.js"></script>');
+  if(!html.includes('travel-ledger.js'))tags.push('<script src="./travel-ledger.js"></script>');
+  if(!html.includes('hero-surprise.js'))tags.push('<script src="./hero-surprise.js"></script>');
+  if(!html.includes('runtime-fixes.js'))tags.push('<script src="./runtime-fixes.js"></script>');
   if(tags.length){
     const block=tags.join('\n');
     html=html.includes('</body>')?html.replace('</body>',`${block}\n</body>`):`${html}\n${block}`;
@@ -36,7 +43,7 @@ self.addEventListener('install',event=>{
 
 self.addEventListener('activate',event=>{
   event.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k))))
+    caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k))))
   );
   self.clients.claim();
 });

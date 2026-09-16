@@ -1,5 +1,6 @@
 const fs=require('fs');
 const path=require('path');
+const https=require('https');
 const express=require('express');
 const cors=require('cors');
 const webpush=require('web-push');
@@ -13,6 +14,11 @@ const VAPID_SUBJECT=process.env.VAPID_SUBJECT||'mailto:example@example.com';
 const CRON_SECRET=process.env.CRON_SECRET||'';
 const STORE_FILE=process.env.STORE_FILE||path.join(__dirname,'data','store.json');
 const ACTIVATION_CONFIRM_DELAY_MS=10000;
+const EXPECTED_RELEASE_VERSION='20260916-v12';
+const RELEASE_URL=process.env.RELEASE_URL||'https://r-gh-c.github.io/Chiang-Mai/release.json';
+const RELEASE_CHECK_DELAY_MS=15000;
+const RELEASE_CHECK_INTERVAL_MS=15000;
+const RELEASE_CHECK_MAX=24;
 
 if(!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY){
   console.warn('WARNING: VAPID keys are not configured. Run: npm run generate-vapid');
@@ -38,138 +44,97 @@ function saveStore(store){
   fs.mkdirSync(path.dirname(STORE_FILE),{recursive:true});
   fs.writeFileSync(STORE_FILE,JSON.stringify(store,null,2));
 }
-function normalizeIdentity(x){
-  return ['richard','angel','admin'].includes(x)?x:null;
-}
+function normalizeIdentity(x){return ['richard','angel','admin'].includes(x)?x:null;}
+function ensureStoreShape(store){if(!Array.isArray(store.subscriptions))store.subscriptions=[];if(!store.sent||typeof store.sent!=='object')store.sent={};return store;}
 
 async function sendActivationConfirmation(subscription,identity){
   if(identity==='admin'||!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY)return;
   const label=identity==='angel'?'🐵 Angel':'🎓 Richard';
-  const payload=JSON.stringify({
-    title:'清邁 2026｜背景提醒已啟用',
-    body:`${label} 的背景課程提醒已可正常接收。`,
-    tag:`cm26-activation-${identity}`,
-    url:'./'
-  });
-  try{
-    await webpush.sendNotification(subscription,payload);
-  }catch(err){
-    if(err.statusCode===404||err.statusCode===410){
-      const store=loadStore();
-      store.subscriptions=store.subscriptions.filter(x=>x.subscription?.endpoint!==subscription.endpoint);
-      saveStore(store);
-    }
+  const payload=JSON.stringify({title:'清邁 2026｜背景提醒已啟用',body:`${label} 的背景課程提醒已可正常接收。`,tag:`cm26-activation-${identity}`,url:'./'});
+  try{await webpush.sendNotification(subscription,payload);}
+  catch(err){
+    if(err.statusCode===404||err.statusCode===410){const store=ensureStoreShape(loadStore());store.subscriptions=store.subscriptions.filter(x=>x.subscription?.endpoint!==subscription.endpoint);saveStore(store);}
     console.error('Activation confirmation Push failed',err.statusCode||err.message);
   }
 }
 
-app.get('/health',(req,res)=>res.json({ok:true,time:new Date().toISOString()}));
-
-app.get('/api/vapid-public-key',(req,res)=>{
-  if(!VAPID_PUBLIC_KEY)return res.status(503).json({error:'VAPID key not configured'});
-  res.json({publicKey:VAPID_PUBLIC_KEY});
-});
+app.get('/health',(req,res)=>res.json({ok:true,time:new Date().toISOString(),release:EXPECTED_RELEASE_VERSION}));
+app.get('/api/vapid-public-key',(req,res)=>{if(!VAPID_PUBLIC_KEY)return res.status(503).json({error:'VAPID key not configured'});res.json({publicKey:VAPID_PUBLIC_KEY});});
 
 app.post('/api/subscribe',(req,res)=>{
-  const identity=normalizeIdentity(req.body?.identity);
-  const subscription=req.body?.subscription;
+  const identity=normalizeIdentity(req.body?.identity);const subscription=req.body?.subscription;
   if(!identity||!subscription?.endpoint)return res.status(400).json({error:'invalid subscription'});
-  const store=loadStore();
-  let row=store.subscriptions.find(x=>x.subscription?.endpoint===subscription.endpoint);
-  if(!row){
-    row={subscription,identities:[],createdAt:new Date().toISOString()};
-    store.subscriptions.push(row);
-  }else{
-    row.subscription=subscription;
-  }
-  if(!row.identities.includes(identity))row.identities.push(identity);
-  row.updatedAt=new Date().toISOString();
-  saveStore(store);
-
+  const store=ensureStoreShape(loadStore());let row=store.subscriptions.find(x=>x.subscription?.endpoint===subscription.endpoint);
+  if(!row){row={subscription,identities:[],createdAt:new Date().toISOString()};store.subscriptions.push(row);}else row.subscription=subscription;
+  if(!row.identities.includes(identity))row.identities.push(identity);row.updatedAt=new Date().toISOString();saveStore(store);
   const confirmationScheduled=identity!=='admin'&&!!VAPID_PUBLIC_KEY&&!!VAPID_PRIVATE_KEY;
-  if(confirmationScheduled){
-    setTimeout(()=>sendActivationConfirmation(subscription,identity).catch(console.error),ACTIVATION_CONFIRM_DELAY_MS);
-  }
-  res.json({
-    ok:true,
-    identities:row.identities,
-    confirmationScheduled,
-    confirmationDelaySeconds:confirmationScheduled?ACTIVATION_CONFIRM_DELAY_MS/1000:0
-  });
+  if(confirmationScheduled)setTimeout(()=>sendActivationConfirmation(subscription,identity).catch(console.error),ACTIVATION_CONFIRM_DELAY_MS);
+  res.json({ok:true,identities:row.identities,confirmationScheduled,confirmationDelaySeconds:confirmationScheduled?ACTIVATION_CONFIRM_DELAY_MS/1000:0});
 });
 
 app.post('/api/unsubscribe',(req,res)=>{
-  const identity=normalizeIdentity(req.body?.identity);
-  const endpoint=req.body?.endpoint;
-  if(!identity||!endpoint)return res.status(400).json({error:'invalid request'});
-  const store=loadStore();
-  const row=store.subscriptions.find(x=>x.subscription?.endpoint===endpoint);
-  if(row){
-    row.identities=row.identities.filter(x=>x!==identity);
-    if(!row.identities.length){
-      store.subscriptions=store.subscriptions.filter(x=>x!==row);
-    }
-    saveStore(store);
-  }
-  res.json({ok:true});
+  const identity=normalizeIdentity(req.body?.identity);const endpoint=req.body?.endpoint;if(!identity||!endpoint)return res.status(400).json({error:'invalid request'});
+  const store=ensureStoreShape(loadStore());const row=store.subscriptions.find(x=>x.subscription?.endpoint===endpoint);
+  if(row){row.identities=row.identities.filter(x=>x!==identity);if(!row.identities.length)store.subscriptions=store.subscriptions.filter(x=>x!==row);saveStore(store);}res.json({ok:true});
 });
 
 async function sendReminder(course,offset,store){
-  const key=`${course.id}_${offset}`;
-  if(store.sent[key])return 0;
-  const payload=JSON.stringify({
-    title:`${course.owner==='angel'?'🐵 Angel':'🎓 Richard'}｜${offset} 分鐘後上課`,
-    body:`${course.subject}｜泰國時間 ${course.thailand}`,
-    tag:`course-${course.id}-${offset}`,
-    courseId:course.id,
-    url:`./?course=${encodeURIComponent(course.id)}`
-  });
+  const key=`${course.id}_${offset}`;if(store.sent[key])return 0;
+  const payload=JSON.stringify({title:`${course.owner==='angel'?'🐵 Angel':'🎓 Richard'}｜${offset} 分鐘後上課`,body:`${course.subject}｜泰國時間 ${course.thailand}`,tag:`course-${course.id}-${offset}`,courseId:course.id,url:`./?course=${encodeURIComponent(course.id)}`});
   let sent=0;
   for(const row of [...store.subscriptions]){
-    const should=row.identities.includes('admin')||row.identities.includes(course.owner);
-    if(!should)continue;
-    try{
-      await webpush.sendNotification(row.subscription,payload);
-      sent++;
-    }catch(err){
-      if(err.statusCode===404||err.statusCode===410){
-        store.subscriptions=store.subscriptions.filter(x=>x!==row);
-      }else{
-        console.error('Push failed',err.statusCode||err.message);
-      }
-    }
+    const should=row.identities.includes('admin')||row.identities.includes(course.owner);if(!should)continue;
+    try{await webpush.sendNotification(row.subscription,payload);sent++;}
+    catch(err){if(err.statusCode===404||err.statusCode===410)store.subscriptions=store.subscriptions.filter(x=>x!==row);else console.error('Push failed',err.statusCode||err.message);}
   }
-  store.sent[key]={sentAt:new Date().toISOString(),count:sent};
-  return sent;
+  store.sent[key]={sentAt:new Date().toISOString(),count:sent};return sent;
 }
 
 async function runScheduler(){
   if(!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY)return {ok:false,error:'VAPID not configured'};
-  const now=Date.now();
-  const store=loadStore();
-  const results=[];
-  for(const course of COURSES){
-    const start=new Date(course.start).getTime();
-    for(const offset of OFFSETS){
-      const target=start-offset*60000;
-      if(now>=target&&now<target+90000&&!store.sent[`${course.id}_${offset}`]){
-        const count=await sendReminder(course,offset,store);
-        results.push({course:course.id,offset,count});
-      }
-    }
-  }
-  saveStore(store);
-  return {ok:true,results};
+  const now=Date.now();const store=ensureStoreShape(loadStore());const results=[];
+  for(const course of COURSES){const start=new Date(course.start).getTime();for(const offset of OFFSETS){const target=start-offset*60000;if(now>=target&&now<target+90000&&!store.sent[`${course.id}_${offset}`]){const count=await sendReminder(course,offset,store);results.push({course:course.id,offset,count});}}}
+  saveStore(store);return {ok:true,results};
 }
-
 setInterval(()=>runScheduler().catch(console.error),30000);
 
 app.post('/api/tick',async(req,res)=>{
-  if(CRON_SECRET&&req.headers['x-cron-secret']!==CRON_SECRET){
-    return res.status(401).json({error:'unauthorized'});
-  }
-  try{res.json(await runScheduler())}
-  catch(e){res.status(500).json({error:e.message})}
+  if(CRON_SECRET&&req.headers['x-cron-secret']!==CRON_SECRET)return res.status(401).json({error:'unauthorized'});
+  try{res.json(await runScheduler())}catch(e){res.status(500).json({error:e.message})}
 });
 
-app.listen(PORT,()=>console.log(`Push server listening on ${PORT}`));
+function fetchReleaseJson(){
+  return new Promise((resolve,reject)=>{
+    const url=new URL(RELEASE_URL);url.searchParams.set('_',Date.now().toString());
+    const req=https.get(url,{headers:{'User-Agent':'ChiangMai-Release-Notifier/1.0','Cache-Control':'no-cache'}},res=>{
+      let data='';res.setEncoding('utf8');res.on('data',c=>{data+=c;if(data.length>65536)req.destroy(new Error('release response too large'));});res.on('end',()=>{if(res.statusCode<200||res.statusCode>=300)return reject(new Error(`release HTTP ${res.statusCode}`));try{resolve(JSON.parse(data))}catch(e){reject(e);}});
+    });req.setTimeout(8000,()=>req.destroy(new Error('release check timeout')));req.on('error',reject);
+  });
+}
+
+async function sendReleaseNotification(info){
+  if(!VAPID_PUBLIC_KEY||!VAPID_PRIVATE_KEY)return {sent:0,skipped:'VAPID not configured'};
+  const store=ensureStoreShape(loadStore());const key=`release_${info.version}`;if(store.sent[key])return {sent:0,skipped:'already sent'};
+  const summary=String(info.publicSummary||'已完成最新版本更新。').slice(0,160);let sent=0;
+  for(const row of [...store.subscriptions]){
+    const ids=Array.isArray(row.identities)?row.identities:[];const angelTarget=ids.includes('angel');
+    const payload=JSON.stringify({title:angelTarget?'🐒 清邁 2026 已更新完成 ✅':'清邁 2026 已更新完成 ✅',body:angelTarget?`🐵 ${summary}`:summary,tag:`cm26-release-${info.version}`,url:'./'});
+    try{await webpush.sendNotification(row.subscription,payload);sent++;}
+    catch(err){if(err.statusCode===404||err.statusCode===410)store.subscriptions=store.subscriptions.filter(x=>x!==row);else console.error('Release Push failed',err.statusCode||err.message);}
+  }
+  store.sent[key]={sentAt:new Date().toISOString(),count:sent,summary};saveStore(store);return {sent};
+}
+
+async function waitForProductionRelease(){
+  for(let i=0;i<RELEASE_CHECK_MAX;i++){
+    try{const info=await fetchReleaseJson();if(info?.version===EXPECTED_RELEASE_VERSION){const result=await sendReleaseNotification(info);console.log('Release notification check complete',EXPECTED_RELEASE_VERSION,result);return;}}
+    catch(e){console.warn('Release check pending',e.message);}
+    await new Promise(r=>setTimeout(r,RELEASE_CHECK_INTERVAL_MS));
+  }
+  console.warn('Release notification not sent: production release marker did not become ready in time',EXPECTED_RELEASE_VERSION);
+}
+
+app.listen(PORT,()=>{
+  console.log(`Push server listening on ${PORT}`);
+  setTimeout(()=>waitForProductionRelease().catch(err=>console.error('Release notifier failed',err)),RELEASE_CHECK_DELAY_MS);
+});
