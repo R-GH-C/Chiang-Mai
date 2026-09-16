@@ -1,5 +1,5 @@
 {
-  "version": "20260916-v12",
-  "releasedAt": "2026-09-16T03:00:00Z",
-  "publicSummary": "新增旅費記帳、收支統計與筆記列印功能 💰📝"
+  "version": "20260916-v13",
+  "releasedAt": "2026-09-16T03:30:00Z",
+  "publicSummary": "改善 App 更新流程，開啟後會自動套用最新版 🔄"
 }
