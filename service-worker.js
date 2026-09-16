@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-20260916-v12';
+const CACHE_NAME='cm26-pwa-20260916-v13';
 const APP_SHELL=[
   './',
   './index.html',
@@ -11,6 +11,7 @@ const APP_SHELL=[
   './travel-ledger.js',
   './hero-surprise.js',
   './runtime-fixes.js',
+  './pwa-update.js',
   './release.json'
 ];
 
@@ -26,6 +27,7 @@ async function injectRuntimeEnhancements(response){
   if(!html.includes('travel-ledger.js'))tags.push('<script src="./travel-ledger.js"></script>');
   if(!html.includes('hero-surprise.js'))tags.push('<script src="./hero-surprise.js"></script>');
   if(!html.includes('runtime-fixes.js'))tags.push('<script src="./runtime-fixes.js"></script>');
+  if(!html.includes('pwa-update.js'))tags.push('<script src="./pwa-update.js"></script>');
   if(tags.length){
     const block=tags.join('\n');
     html=html.includes('</body>')?html.replace('</body>',`${block}\n</body>`):`${html}\n${block}`;
@@ -42,10 +44,21 @@ self.addEventListener('install',event=>{
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k))))
-  );
-  self.clients.claim();
+  event.waitUntil((async()=>{
+    const keys=await caches.keys();
+    const hadPreviousAppCache=keys.some(k=>k.startsWith('cm26-pwa-')&&k!==CACHE_NAME);
+    await Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k)));
+    await self.clients.claim();
+
+    // When replacing an older app shell, immediately reload existing windows once.
+    // This prevents iOS Home Screen PWA from showing the old runtime until a second launch.
+    if(hadPreviousAppCache){
+      const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+      await Promise.all(windows.map(async client=>{
+        try{await client.navigate(client.url);}catch(e){}
+      }));
+    }
+  })());
 });
 
 self.addEventListener('fetch',event=>{
@@ -55,7 +68,7 @@ self.addEventListener('fetch',event=>{
 
   if(event.request.mode==='navigate'){
     event.respondWith(
-      fetch(event.request).then(async res=>{
+      fetch(event.request,{cache:'no-store'}).then(async res=>{
         const copy=res.clone();
         caches.open(CACHE_NAME).then(c=>c.put('./index.html',copy));
         return injectRuntimeEnhancements(res);
