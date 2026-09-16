@@ -10,6 +10,7 @@ const APP_SHELL=[
   './sheet-sync-20260915.js',
   './travel-ledger.js',
   './hero-surprise.js',
+  './runtime-fixes.js',
   './release.json'
 ];
 
@@ -24,6 +25,7 @@ async function injectRuntimeEnhancements(response){
   if(!html.includes('sheet-sync-20260915.js'))tags.push('<script src="./sheet-sync-20260915.js"></script>');
   if(!html.includes('travel-ledger.js'))tags.push('<script src="./travel-ledger.js"></script>');
   if(!html.includes('hero-surprise.js'))tags.push('<script src="./hero-surprise.js"></script>');
+  if(!html.includes('runtime-fixes.js'))tags.push('<script src="./runtime-fixes.js"></script>');
   if(tags.length){
     const block=tags.join('\n');
     html=html.includes('</body>')?html.replace('</body>',`${block}\n</body>`):`${html}\n${block}`;
