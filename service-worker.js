@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-20260916-v14';
+const CACHE_NAME='cm26-pwa-20260917-v15';
 const APP_SHELL=[
   './',
   './index.html',
@@ -49,14 +49,9 @@ self.addEventListener('activate',event=>{
     const hadPreviousAppCache=keys.some(k=>k.startsWith('cm26-pwa-')&&k!==CACHE_NAME);
     await Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k)));
     await self.clients.claim();
-
-    // When replacing an older app shell, immediately reload existing windows once.
-    // This prevents iOS Home Screen PWA from showing the old runtime until a second launch.
     if(hadPreviousAppCache){
       const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-      await Promise.all(windows.map(async client=>{
-        try{await client.navigate(client.url);}catch(e){}
-      }));
+      await Promise.all(windows.map(async client=>{try{await client.navigate(client.url);}catch(e){}}));
     }
   })());
 });
