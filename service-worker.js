@@ -1,4 +1,4 @@
-const CACHE_NAME='cm26-pwa-20260917-v15';
+const CACHE_NAME='cm26-pwa-20260919-v16';
 const APP_SHELL=[
   './',
   './index.html',
@@ -8,6 +8,8 @@ const APP_SHELL=[
   './pwa-enhancements.js',
   './trip-extras.js',
   './sheet-sync-20260915.js',
+  './itinerary-merge-core.js',
+  './itinerary-editor.js',
   './travel-ledger.js',
   './hero-surprise.js',
   './runtime-fixes.js',
@@ -24,6 +26,8 @@ async function injectRuntimeEnhancements(response){
   const tags=[];
   if(!html.includes('trip-extras.js'))tags.push('<script src="./trip-extras.js"></script>');
   if(!html.includes('sheet-sync-20260915.js'))tags.push('<script src="./sheet-sync-20260915.js"></script>');
+  if(!html.includes('itinerary-merge-core.js'))tags.push('<script src="./itinerary-merge-core.js"></script>');
+  if(!html.includes('itinerary-editor.js'))tags.push('<script src="./itinerary-editor.js"></script>');
   if(!html.includes('travel-ledger.js'))tags.push('<script src="./travel-ledger.js"></script>');
   if(!html.includes('hero-surprise.js'))tags.push('<script src="./hero-surprise.js"></script>');
   if(!html.includes('runtime-fixes.js'))tags.push('<script src="./runtime-fixes.js"></script>');
@@ -46,13 +50,10 @@ self.addEventListener('install',event=>{
 self.addEventListener('activate',event=>{
   event.waitUntil((async()=>{
     const keys=await caches.keys();
-    const hadPreviousAppCache=keys.some(k=>k.startsWith('cm26-pwa-')&&k!==CACHE_NAME);
     await Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k)));
     await self.clients.claim();
-    if(hadPreviousAppCache){
-      const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-      await Promise.all(windows.map(async client=>{try{await client.navigate(client.url);}catch(e){}}));
-    }
+    // v16 intentionally does not navigate open clients here. pwa-update.js asks the
+    // user to save/close active forms before reloading so an update cannot erase input.
   })());
 });
 
