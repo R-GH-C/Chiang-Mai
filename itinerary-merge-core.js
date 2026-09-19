@@ -19,8 +19,10 @@
     if(!mine||!theirs)return {record:null,conflicts:['missing-record']};
     const a=project(base),m=project(mine),t=project(theirs);
     const conflicts=[];
-    if(m.custom!==t.custom && (!a||m.custom!==a.custom&&t.custom!==a.custom))conflicts.push('custom');
-    const result={id:m.id,custom:m.custom,deleted:false,patch:{}};
+    const baseCustom=!!a?.custom;
+    const mineCustomChanged=m.custom!==baseCustom,theirCustomChanged=t.custom!==baseCustom;
+    if(mineCustomChanged&&theirCustomChanged&&m.custom!==t.custom)conflicts.push('custom');
+    const result={id:m.id,custom:mineCustomChanged?m.custom:t.custom,deleted:false,patch:{}};
     for(const key of ['deleted',...FIELDS]){
       const b=key==='deleted'?!!a?.deleted:a?.patch?.[key];
       const l=key==='deleted'?m.deleted:m.patch[key];
