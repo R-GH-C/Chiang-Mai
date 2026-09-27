@@ -1554,7 +1554,12 @@ function linkify(s){
 }
 function fmtNum(n){ return Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0}); }
 function dateMD(iso){ if(!iso)return ''; const d=new Date(iso+'T00:00:00+08:00'); return `${d.getMonth()+1}/${d.getDate()}`; }
-function weekday(iso){ return ['日','一','二','三','四','五','六'][new Date(iso+'T00:00:00+08:00').getDay()]; }
+function weekday(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return '';
+  const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])));
+  return ['日','一','二','三','四','五','六'][d.getUTCDay()];
+}
 function getRows(sheet, headerRow=3, startRow=4){
   const a=DATA[sheet]||[]; const h=(a[headerRow]||[]).map(cell);
   return a.slice(startRow).filter(r=>r.some(x=>cell(x).trim())).map((r,idx)=>{
