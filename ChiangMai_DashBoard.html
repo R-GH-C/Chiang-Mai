@@ -194,7 +194,11 @@ function linkify(s){
   return t.replace(/(https?:\/\/[^\s<]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 }
 function fmtNum(n){ return Number(n||0).toLocaleString('zh-TW',{maximumFractionDigits:0}); }
-function dateMD(iso){ if(!iso)return ''; const d=new Date(iso+'T00:00:00+08:00'); return `${d.getMonth()+1}/${d.getDate()}`; }
+function dateMD(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return '';
+  return `${Number(m[2])}/${Number(m[3])}`;
+}
 function weekday(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m)return '';
