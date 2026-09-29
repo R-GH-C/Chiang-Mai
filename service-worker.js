@@ -1,4 +1,6 @@
-const CACHE_NAME='cm26-pwa-20260929-v20';
+const CACHE_NAME='cm26-pwa-20260929-v21';
+const RUNTIME_VERSION='20260929-v21';
+const HERO_ART_CACHE='cm26-hero-art-v2';
 const APP_SHELL=[
   './',
   './index.html',
@@ -11,7 +13,7 @@ const APP_SHELL=[
   './itinerary-merge-core.js',
   './itinerary-editor.js',
   './travel-ledger.js',
-  './hero-surprise.js',
+  './hero-surprise.js?v=20260929-v21',
   './runtime-fixes.js',
   './pwa-update.js',
   './release.json'
@@ -29,7 +31,7 @@ async function injectRuntimeEnhancements(response){
   if(!html.includes('itinerary-merge-core.js'))tags.push('<script src="./itinerary-merge-core.js"></script>');
   if(!html.includes('itinerary-editor.js'))tags.push('<script src="./itinerary-editor.js"></script>');
   if(!html.includes('travel-ledger.js'))tags.push('<script src="./travel-ledger.js"></script>');
-  if(!html.includes('hero-surprise.js'))tags.push('<script src="./hero-surprise.js"></script>');
+  if(!html.includes('hero-surprise.js'))tags.push(`<script src="./hero-surprise.js?v=${RUNTIME_VERSION}"></script>`);
   if(!html.includes('runtime-fixes.js'))tags.push('<script src="./runtime-fixes.js"></script>');
   if(!html.includes('pwa-update.js'))tags.push('<script src="./pwa-update.js"></script>');
   if(tags.length){
@@ -50,7 +52,7 @@ self.addEventListener('install',event=>{
 self.addEventListener('activate',event=>{
   event.waitUntil((async()=>{
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!==CACHE_NAME&&!k.startsWith('cm26-hero-art-')).map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!==CACHE_NAME&&k!==HERO_ART_CACHE).map(k=>caches.delete(k)));
     await self.clients.claim();
     // v16 intentionally does not navigate open clients here. pwa-update.js asks the
     // user to save/close active forms before reloading so an update cannot erase input.
@@ -69,6 +71,18 @@ self.addEventListener('fetch',event=>{
         caches.open(CACHE_NAME).then(c=>c.put('./index.html',copy));
         return injectRuntimeEnhancements(res);
       }).catch(async()=>injectRuntimeEnhancements(await caches.match('./index.html')))
+    );
+    return;
+  }
+
+  const runtimeName=url.pathname.split('/').pop();
+  if(runtimeName==='hero-surprise.js'){
+    event.respondWith(
+      fetch(event.request,{cache:'no-store'}).then(res=>{
+        const copy=res.clone();
+        caches.open(CACHE_NAME).then(c=>c.put(event.request,copy));
+        return res;
+      }).catch(()=>caches.match(event.request).then(cached=>cached||caches.match('./hero-surprise.js?v='+RUNTIME_VERSION)))
     );
     return;
   }
