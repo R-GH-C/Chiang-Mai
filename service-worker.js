@@ -1,5 +1,5 @@
-const CACHE_NAME='cm26-pwa-20260929-v22';
-const RUNTIME_VERSION='20260929-v22';
+const CACHE_NAME='cm26-pwa-20260929-v23';
+const RUNTIME_VERSION='20260929-v23';
 const HERO_ART_CACHE='cm26-hero-art-v2';
 const APP_SHELL=[
   './',
