@@ -1,6 +1,6 @@
 {
-  "version": "20260929-v22",
-  "releasedAt": "2026-09-29T04:26:42.686Z",
-  "publicSummary": "改善首頁互動效果在 iPhone App 模式下的穩定性。",
+  "version": "20260929-v23",
+  "releasedAt": "2026-09-29T05:12:47.787Z",
+  "publicSummary": "改善首頁主視覺在 iPhone App 模式下的點擊互動穩定性。",
   "notify": false
 }
