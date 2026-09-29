@@ -8,6 +8,7 @@
   let activeKey='';
   let heroTimer=0;
   let audioCtx=null;
+  const heroMedia={monkey:null,elephant:null};
 
   const META={
     '2026-09-23':{title:'抵達清邁',icon:'✈️🌿',line:'從抵達開始，慢慢進入清邁的節奏。',a:'#8fd3e8',b:'#eef8e8',accent:'#397a91',scene:'arrival'},
@@ -153,6 +154,86 @@
     primePriority(date).catch(()=>{});
   }
 
+  function writeWavText(view,offset,text){
+    for(let i=0;i<text.length;i++)view.setUint8(offset+i,text.charCodeAt(i));
+  }
+  function makeHeroWavUrl(kind){
+    const sampleRate=11025;
+    const duration=kind==='monkey'?.62:1.35;
+    const samples=Math.floor(sampleRate*duration);
+    const buffer=new ArrayBuffer(44+samples);
+    const view=new DataView(buffer);
+    writeWavText(view,0,'RIFF');
+    view.setUint32(4,36+samples,true);
+    writeWavText(view,8,'WAVE');
+    writeWavText(view,12,'fmt ');
+    view.setUint32(16,16,true);
+    view.setUint16(20,1,true);
+    view.setUint16(22,1,true);
+    view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate,true);
+    view.setUint16(32,1,true);
+    view.setUint16(34,8,true);
+    writeWavText(view,36,'data');
+    view.setUint32(40,samples,true);
+
+    for(let i=0;i<samples;i++){
+      const t=i/sampleRate;
+      let sample=0;
+      if(kind==='monkey'){
+        const env=Math.min(1,t/.025)*Math.pow(Math.max(0,1-t/duration),1.25);
+        const sweep=880+420*Math.sin(Math.PI*2*2.6*t)+170*Math.sin(Math.PI*2*5.2*t);
+        sample=.34*env*(Math.sin(Math.PI*2*sweep*t)+.28*Math.sin(Math.PI*2*(sweep*.52)*t));
+      }else{
+        const env=Math.min(1,t/.05)*Math.pow(Math.max(0,1-t/duration),1.05);
+        const low=125-38*(t/duration);
+        sample=.3*env*Math.sin(Math.PI*2*low*t);
+        const notes=[392,523.25,659.25];
+        for(let n=0;n<notes.length;n++){
+          const start=.34+n*.075;
+          if(t>=start){
+            const d=t-start;
+            sample+=.13*Math.exp(-d*4.8)*Math.sin(Math.PI*2*notes[n]*d);
+          }
+        }
+      }
+      sample=Math.max(-1,Math.min(1,sample));
+      view.setUint8(44+i,Math.max(0,Math.min(255,Math.round(128+sample*118))));
+    }
+    return URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
+  }
+  function prepareHeroMedia(){
+    for(const kind of ['monkey','elephant']){
+      if(heroMedia[kind])continue;
+      try{
+        const audio=document.createElement('audio');
+        audio.preload='auto';
+        audio.setAttribute('playsinline','');
+        audio.setAttribute('webkit-playsinline','');
+        audio.volume=.95;
+        audio.src=makeHeroWavUrl(kind);
+        audio.style.display='none';
+        audio.dataset.heroAudio=kind;
+        document.body.appendChild(audio);
+        audio.load();
+        heroMedia[kind]=audio;
+      }catch(e){}
+    }
+  }
+  function playHeroMedia(kind,full){
+    const audio=heroMedia[kind];
+    if(!audio)return false;
+    try{
+      try{audio.pause();audio.currentTime=0;}catch(e){}
+      const promise=audio.play();
+      if(promise&&typeof promise.catch==='function'){
+        promise.catch(()=>playWebAudioFallback(kind,full));
+      }
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
   function getAudio(){
     if(audioCtx)return audioCtx;
     try{
@@ -190,12 +271,17 @@
   }
 
   let lastHeroGestureAt=0;
-  function safePlayHeroAudio(kind,full){
+  function playWebAudioFallback(kind,full){
     try{
       unlockAudio();
       if(kind==='monkey')playMonkey(full);
       else playElephant();
     }catch(e){}
+  }
+  function safePlayHeroAudio(kind,full){
+    prepareHeroMedia();
+    if(playHeroMedia(kind,full))return;
+    playWebAudioFallback(kind,full);
   }
   function onHeroActivate(event){
     if(event){
@@ -210,6 +296,10 @@
 
     const kind=box.dataset.variant;
     const full=kind==='monkey'&&sessionStorage.getItem('cm26_monkey_surprise_seen')!=='1';
+
+    // Start HTMLMediaElement playback directly inside the user gesture on iPhone/PWA.
+    // Audio failure is isolated from the visual animation.
+    safePlayHeroAudio(kind,full);
     box.dataset.busy='1';
 
     try{
@@ -219,9 +309,6 @@
       actor.innerHTML=overlaySvg(kind);
       box.appendChild(actor);
       void actor.offsetWidth;
-
-      // Audio is optional: any iOS/WebAudio failure must not affect the visual interaction.
-      safePlayHeroAudio(kind,full);
 
       if(kind==='monkey'){
         sessionStorage.setItem('cm26_monkey_surprise_seen','1');
@@ -243,6 +330,6 @@
     const fn=window.applyDailyTheme;if(typeof fn==='function'&&!fn.__heroWrapped){const wrapped=function(...args){const out=fn.apply(this,args);setTimeout(()=>applyHero(true),40);return out;};wrapped.__heroWrapped=true;window.applyDailyTheme=wrapped;}
     ['refreshAuthenticatedUI','renderHome','showPage'].forEach(name=>{const f=window[name];if(typeof f!=='function'||f.__heroRefreshWrapped)return;const wrapped=function(...args){const out=f.apply(this,args);setTimeout(()=>applyHero(true),70);return out;};wrapped.__heroRefreshWrapped=true;window[name]=wrapped;});
   }
-  function init(){addStyles();wrapTheme();applyHero(true);primePriority(activeDate()).catch(()=>{});clearInterval(heroTimer);heroTimer=setInterval(()=>applyHero(true),30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyHero(true);});const mo=new MutationObserver(()=>{if(!document.getElementById('cmDailyHero')&&document.querySelector('.hero-main'))applyHero(true);});mo.observe(document.body,{childList:true,subtree:true});}
+  function init(){addStyles();prepareHeroMedia();wrapTheme();applyHero(true);primePriority(activeDate()).catch(()=>{});clearInterval(heroTimer);heroTimer=setInterval(()=>applyHero(true),30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyHero(true);});const mo=new MutationObserver(()=>{if(!document.getElementById('cmDailyHero')&&document.querySelector('.hero-main'))applyHero(true);});mo.observe(document.body,{childList:true,subtree:true});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
