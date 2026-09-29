@@ -94,7 +94,7 @@
     const s=document.createElement('style');s.id='cm-hero-surprise-style';s.textContent=`
       .cm-daily-hero{position:relative;width:100%;height:auto;aspect-ratio:5/2;border-radius:18px;overflow:hidden;margin:2px 0 14px;background:rgba(255,255,255,.12);isolation:isolate}
       .cm-daily-hero img.cm-hero-img{display:block;width:100%;height:100%;object-fit:cover;object-position:center;user-select:none;-webkit-user-drag:none}
-      .cm-daily-hero.interactive{cursor:pointer}.cm-daily-hero.interactive:active{transform:scale(.995)}
+      .cm-daily-hero.interactive{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.cm-daily-hero.interactive:active{transform:scale(.995)}
       .cm-hero-caption{position:absolute;left:12px;right:12px;bottom:10px;z-index:3;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.55);font-weight:800;font-size:13px;line-height:1.35;pointer-events:none}.cm-hero-caption small{display:block;font-size:11px;font-weight:650;opacity:.9;margin-top:2px}
       .cm-hero-shade{position:absolute;inset:45% 0 0;background:linear-gradient(transparent,rgba(17,24,39,.54));z-index:2;pointer-events:none}
       .cm-surprise-actor{position:absolute;left:50%;top:48%;width:min(58%,330px);height:auto;z-index:8;pointer-events:none;opacity:0;transform:translate(-50%,-50%) scale(.32);filter:drop-shadow(0 18px 20px rgba(0,0,0,.24))}.cm-surprise-actor svg{display:block;width:100%;height:auto}
@@ -109,8 +109,33 @@
     `;document.head.appendChild(s);
   }
 
+  function bindHeroInteraction(box){
+    if(!box)return;
+    if(box.__cmHeroPointerHandler)box.removeEventListener('pointerup',box.__cmHeroPointerHandler,true);
+    if(box.__cmHeroClickHandler)box.removeEventListener('click',box.__cmHeroClickHandler,true);
+    const pointerHandler=e=>onHeroActivate(e);
+    const clickHandler=e=>onHeroActivate(e);
+    box.__cmHeroPointerHandler=pointerHandler;
+    box.__cmHeroClickHandler=clickHandler;
+    box.addEventListener('pointerup',pointerHandler,true);
+    box.addEventListener('click',clickHandler,true);
+    box.setAttribute('role','button');
+    box.setAttribute('tabindex','0');
+    box.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onHeroActivate(e);}};
+  }
   function ensureHeroBox(){
-    const host=document.querySelector('.hero-main');if(!host)return null;let box=document.getElementById('cmDailyHero');if(!box){box=document.createElement('div');box.id='cmDailyHero';box.className='cm-daily-hero';box.innerHTML=`<img class="cm-hero-img" alt=""><div class="cm-hero-shade"></div><div class="cm-hero-caption"></div>`;const chip=document.getElementById('cmThemeChip');if(chip)chip.insertAdjacentElement('afterend',box);else host.prepend(box);box.addEventListener('click',onHeroClick);}return box;
+    const host=document.querySelector('.hero-main');if(!host)return null;
+    let box=document.getElementById('cmDailyHero');
+    if(!box){
+      box=document.createElement('div');
+      box.id='cmDailyHero';
+      box.className='cm-daily-hero';
+      box.innerHTML=`<img class="cm-hero-img" alt=""><div class="cm-hero-shade"></div><div class="cm-hero-caption"></div>`;
+      const chip=document.getElementById('cmThemeChip');
+      if(chip)chip.insertAdjacentElement('afterend',box);else host.prepend(box);
+    }
+    bindHeroInteraction(box);
+    return box;
   }
   function caption(date,variant){
     const m=META[date];if(!m)return '';
@@ -128,7 +153,18 @@
     primePriority(date).catch(()=>{});
   }
 
-  function getAudio(){if(audioCtx)return audioCtx;const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;audioCtx=new A();return audioCtx;}
+  function getAudio(){
+    if(audioCtx)return audioCtx;
+    try{
+      const A=window.AudioContext||window.webkitAudioContext;
+      if(!A)return null;
+      audioCtx=new A();
+      return audioCtx;
+    }catch(e){
+      audioCtx=null;
+      return null;
+    }
+  }
   function unlockAudio(){
     const ctx=getAudio();if(!ctx)return null;
     try{
@@ -153,18 +189,29 @@
     [392,523.25,659.25].forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f;const st=t+.16+i*.055;g.gain.setValueAtTime(.001,st);g.gain.exponentialRampToValueAtTime(.055/(i+1),st+.03);g.gain.exponentialRampToValueAtTime(.001,st+.82);o.connect(g).connect(ctx.destination);o.start(st);o.stop(st+.9);});
   }
 
-  function onHeroClick(){
+  let lastHeroGestureAt=0;
+  function safePlayHeroAudio(kind,full){
+    try{
+      unlockAudio();
+      if(kind==='monkey')playMonkey(full);
+      else playElephant();
+    }catch(e){}
+  }
+  function onHeroActivate(event){
+    const now=Date.now();
+    if(now-lastHeroGestureAt<450)return;
+    lastHeroGestureAt=now;
+
     const box=document.getElementById('cmDailyHero');
     if(!box||box.dataset.date!=='2026-09-29'||box.dataset.busy==='1')return;
+    if(event){
+      try{event.stopImmediatePropagation();event.stopPropagation();}catch(e){}
+    }
+
     const kind=box.dataset.variant;
     const full=kind==='monkey'&&sessionStorage.getItem('cm26_monkey_surprise_seen')!=='1';
-
-    // Keep sound inside the original user gesture on iOS/PWA.
-    unlockAudio();
-    if(kind==='monkey')playMonkey(full);
-    else playElephant();
-
     box.dataset.busy='1';
+
     try{
       const actor=document.createElement('div');
       actor.className=`cm-surprise-actor ${kind}`;
@@ -172,6 +219,9 @@
       actor.innerHTML=overlaySvg(kind);
       box.appendChild(actor);
       void actor.offsetWidth;
+
+      // Audio is optional: any iOS/WebAudio failure must not affect the visual interaction.
+      safePlayHeroAudio(kind,full);
 
       if(kind==='monkey'){
         sessionStorage.setItem('cm26_monkey_surprise_seen','1');
