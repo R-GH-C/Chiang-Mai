@@ -81,12 +81,12 @@
     try{const cache=await caches.open(HERO_CACHE);const url=new URL(virtualUrl(key),location.href).href;const req=new Request(url,{method:'GET'});if(!(await cache.match(req)))await cache.put(req,new Response(svg,{headers:{'Content-Type':'image/svg+xml;charset=utf-8','Cache-Control':'public,max-age=31536000,immutable'}}));return navigator.serviceWorker?.controller?virtualUrl(key):dataUrl(svg);}catch(e){return dataUrl(svg);}
   }
   async function prime(date,variant='default'){if(!inTrip(date))return null;const key=keyFor(date,variant);const svg=svgFor(date,variant);return {key,url:await cacheSvg(key,svg),svg};}
-  async function primeOverlay(kind){const key=`2026-09-29-${kind}-interaction-v${HERO_VERSION}`;const svg=overlaySvg(kind);return {key,url:await cacheSvg(key,svg),svg};}
+  function primeOverlay(kind){return {svg:overlaySvg(kind)};}
   async function primePriority(date){
     if(!inTrip(date))return;
     const variant=variantFor(date);await prime(date,variant);
     const tomorrow=nextDate(date);if(inTrip(tomorrow))await prime(tomorrow,variantFor(tomorrow));
-    if(date==='2026-09-29'){await Promise.all([prime(date,'monkey'),prime(date,'elephant'),primeOverlay('monkey'),primeOverlay('elephant')]);}
+    if(date==='2026-09-29'){await Promise.all([prime(date,'monkey'),prime(date,'elephant')]);}
   }
 
   function addStyles(){
@@ -97,7 +97,7 @@
       .cm-daily-hero.interactive{cursor:pointer}.cm-daily-hero.interactive:active{transform:scale(.995)}
       .cm-hero-caption{position:absolute;left:12px;right:12px;bottom:10px;z-index:3;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.55);font-weight:800;font-size:13px;line-height:1.35;pointer-events:none}.cm-hero-caption small{display:block;font-size:11px;font-weight:650;opacity:.9;margin-top:2px}
       .cm-hero-shade{position:absolute;inset:45% 0 0;background:linear-gradient(transparent,rgba(17,24,39,.54));z-index:2;pointer-events:none}
-      .cm-surprise-actor{position:absolute;left:50%;top:48%;width:min(58%,330px);height:auto;z-index:8;pointer-events:none;opacity:0;transform:translate(-50%,-50%) scale(.32);filter:drop-shadow(0 18px 20px rgba(0,0,0,.24))}
+      .cm-surprise-actor{position:absolute;left:50%;top:48%;width:min(58%,330px);height:auto;z-index:8;pointer-events:none;opacity:0;transform:translate(-50%,-50%) scale(.32);filter:drop-shadow(0 18px 20px rgba(0,0,0,.24))}.cm-surprise-actor svg{display:block;width:100%;height:auto}
       .cm-surprise-actor.monkey.go{animation:cmMonkeyJump 1.18s cubic-bezier(.18,.72,.18,1) both}.cm-surprise-actor.monkey.short{animation:cmMonkeyJumpShort .72s ease-out both}
       .cm-surprise-actor.elephant.go{width:min(66%,380px);animation:cmElephantTouch 2.05s cubic-bezier(.22,.58,.24,1) both}
       @keyframes cmMonkeyJump{0%{opacity:0;transform:translate(-50%,-42%) scale(.28) rotate(-6deg)}15%{opacity:1}58%{opacity:1;transform:translate(-50%,-52%) scale(1.18) rotate(2deg)}78%{opacity:1;transform:translate(-50%,-50%) scale(1.62)}100%{opacity:0;transform:translate(-50%,-47%) scale(1.78)}}
@@ -141,20 +141,6 @@
     }catch(e){}
     return ctx;
   }
-  async function waitForImageReady(img){
-    if(!img)return;
-    if(typeof img.decode==='function'){
-      try{await img.decode();return;}catch(e){}
-    }
-    if(img.complete)return;
-    await new Promise(resolve=>{
-      let done=false;
-      const finish=()=>{if(done)return;done=true;clearTimeout(timer);img.removeEventListener('load',finish);img.removeEventListener('error',finish);resolve();};
-      const timer=setTimeout(finish,700);
-      img.addEventListener('load',finish,{once:true});
-      img.addEventListener('error',finish,{once:true});
-    });
-  }
   function noiseBuffer(ctx,duration=.5){const len=Math.max(1,Math.floor(ctx.sampleRate*duration));const b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);return b;}
   function playMonkey(full=true){
     const ctx=getAudio();if(!ctx)return;if(ctx.state==='suspended')ctx.resume();const t=ctx.currentTime+.02;
@@ -167,33 +153,32 @@
     [392,523.25,659.25].forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f;const st=t+.16+i*.055;g.gain.setValueAtTime(.001,st);g.gain.exponentialRampToValueAtTime(.055/(i+1),st+.03);g.gain.exponentialRampToValueAtTime(.001,st+.82);o.connect(g).connect(ctx.destination);o.start(st);o.stop(st+.9);});
   }
 
-  async function onHeroClick(){
+  function onHeroClick(){
     const box=document.getElementById('cmDailyHero');
     if(!box||box.dataset.date!=='2026-09-29'||box.dataset.busy==='1')return;
     const kind=box.dataset.variant;
+    const full=kind==='monkey'&&sessionStorage.getItem('cm26_monkey_surprise_seen')!=='1';
+
+    // Keep sound inside the original user gesture on iOS/PWA.
     unlockAudio();
+    if(kind==='monkey')playMonkey(full);
+    else playElephant();
+
     box.dataset.busy='1';
     try{
-      const art=await primeOverlay(kind);
-      if(!art){box.dataset.busy='0';return;}
-      const actor=document.createElement('img');
+      const actor=document.createElement('div');
       actor.className=`cm-surprise-actor ${kind}`;
-      actor.alt='';
-      actor.decoding='async';
-      actor.src=art.url;
+      actor.setAttribute('aria-hidden','true');
+      actor.innerHTML=overlaySvg(kind);
       box.appendChild(actor);
-      await waitForImageReady(actor);
-      if(!actor.isConnected){box.dataset.busy='0';return;}
       void actor.offsetWidth;
+
       if(kind==='monkey'){
-        const full=sessionStorage.getItem('cm26_monkey_surprise_seen')!=='1';
         sessionStorage.setItem('cm26_monkey_surprise_seen','1');
         requestAnimationFrame(()=>actor.classList.add(full?'go':'short'));
-        setTimeout(()=>playMonkey(full),full?45:25);
         setTimeout(()=>{actor.remove();box.dataset.busy='0';},full?1350:850);
       }else{
         requestAnimationFrame(()=>actor.classList.add('go'));
-        setTimeout(()=>playElephant(),20);
         setTimeout(()=>heartRipples(box),1120);
         setTimeout(()=>{actor.remove();box.dataset.busy='0';},2200);
       }
