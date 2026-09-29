@@ -3,8 +3,8 @@
 
   const TRIP_START='2026-09-23';
   const TRIP_END='2026-10-03';
-  const HERO_CACHE='cm26-hero-art-v1';
-  const HERO_VERSION='1';
+  const HERO_CACHE='cm26-hero-art-v2';
+  const HERO_VERSION='2';
   let activeKey='';
   let heroTimer=0;
   let audioCtx=null;
