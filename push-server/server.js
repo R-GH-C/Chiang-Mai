@@ -14,7 +14,7 @@ const VAPID_SUBJECT=process.env.VAPID_SUBJECT||'mailto:example@example.com';
 const CRON_SECRET=process.env.CRON_SECRET||'';
 const STORE_FILE=process.env.STORE_FILE||path.join(__dirname,'data','store.json');
 const ACTIVATION_CONFIRM_DELAY_MS=10000;
-const EXPECTED_RELEASE_VERSION='20260927-v19';
+const EXPECTED_RELEASE_VERSION='20260929-v20';
 const RELEASE_URL=process.env.RELEASE_URL||'https://r-gh-c.github.io/Chiang-Mai/release.json';
 const RELEASE_CHECK_DELAY_MS=15000;
 const RELEASE_CHECK_INTERVAL_MS=15000;
@@ -127,7 +127,10 @@ async function sendReleaseNotification(info){
 
 async function waitForProductionRelease(){
   for(let i=0;i<RELEASE_CHECK_MAX;i++){
-    try{const info=await fetchReleaseJson();if(info?.version===EXPECTED_RELEASE_VERSION){const result=await sendReleaseNotification(info);console.log('Release notification check complete',EXPECTED_RELEASE_VERSION,result);return;}}
+    try{const info=await fetchReleaseJson();if(info?.version===EXPECTED_RELEASE_VERSION){
+      if(info?.notify===false){console.log('Release notification intentionally skipped',EXPECTED_RELEASE_VERSION);return;}
+      const result=await sendReleaseNotification(info);console.log('Release notification check complete',EXPECTED_RELEASE_VERSION,result);return;
+    }}
     catch(e){console.warn('Release check pending',e.message);}
     await new Promise(r=>setTimeout(r,RELEASE_CHECK_INTERVAL_MS));
   }
