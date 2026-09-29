@@ -198,15 +198,15 @@
     }catch(e){}
   }
   function onHeroActivate(event){
+    if(event){
+      try{event.stopImmediatePropagation();event.stopPropagation();}catch(e){}
+    }
     const now=Date.now();
     if(now-lastHeroGestureAt<450)return;
     lastHeroGestureAt=now;
 
     const box=document.getElementById('cmDailyHero');
     if(!box||box.dataset.date!=='2026-09-29'||box.dataset.busy==='1')return;
-    if(event){
-      try{event.stopImmediatePropagation();event.stopPropagation();}catch(e){}
-    }
 
     const kind=box.dataset.variant;
     const full=kind==='monkey'&&sessionStorage.getItem('cm26_monkey_surprise_seen')!=='1';
